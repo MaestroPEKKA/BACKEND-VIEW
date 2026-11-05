@@ -1,0 +1,35 @@
+# Entornos virtuales de Python
+pekka/
+venv/
+env/
+ENV/
+.venv/
+/#crear el entorno.py
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Datos locales y reportes generados
+data/*.csv
+data/*.db
+*.sqlite3
+*.db
+
+# Modelos pesados / binarios de MediaPipe (opcional mantener en local)
+# Descomenta si prefieres no subirlos a GitHub:
+# src/camera/*.task
+
+# Logs y base de datos temporales
+*.log
+.DS_Store
+Thumbs.db
+
+# Configuración del entorno de desarrollo (VS Code / PyCharm)
+.vscode/
+.idea/
+*.swp
+*.swo
