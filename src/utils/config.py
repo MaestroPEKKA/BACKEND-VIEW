@@ -18,5 +18,5 @@ CONSECUTIVE_FRAMES_FATIGUE = 30
 CABECEO_RATIO_FACTOR = 0.12
 
 # --- CONFIGURACIÓN DE CÁMARA ---
-CAMERA_INDEX = 0
+CAMERA_INDEX = 1
 USE_DIRECT_SHOW = True  # True para forzar DirectShow en Windows y evitar pantallas negras

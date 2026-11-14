@@ -6,6 +6,7 @@ import pandas as pd
 import pygame  # Librería para manejo eficiente de audios MP3
 from src.camera.posture_detector import PostureDetector
 from src.data.storage import StorageManager
+from src.ui.monitor_panel import mostrar_panel
 from src.utils.config import CAMERA_INDEX, USE_DIRECT_SHOW
 import streamlit as st
 
@@ -237,7 +238,9 @@ def main():
     detector = PostureDetector(consecutive_frames_fatigue=30)
 
     cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+    panel_estado = st.empty()
     alerta_placeholder = st.empty()
+    mostrar_panel(panel_estado, camara_conectada=cap.isOpened())
 
     try:
       while cap.isOpened() and st.session_state.monitoreando:
@@ -261,6 +264,11 @@ def main():
         # Analizar e incluir el renderizado de los puntos en pantalla
         alertas, calibrado, frame_procesado = detector.analizar_y_dibujar(
             frame, pose_result, face_result
+        )
+
+        mostrar_panel(
+            panel_estado, alertas=alertas, calibrado=calibrado,
+            camara_conectada=True
         )
 
         # Registrar alertas y controlar las alarmas de audio dinámicas
@@ -299,6 +307,7 @@ def main():
       if not st.session_state.monitoreando:
         st.rerun()
   else:
+    mostrar_panel(st.empty())
     st.markdown(
         """
             <div style='background-color: #111827; border: 1px solid #374151; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 25px;'>
@@ -406,4 +415,4 @@ def main():
 if __name__ == "__main__":
   main()
 
-  //agregando colaborador
+ 
