@@ -7,6 +7,7 @@ import random
 import pygame  # Librería para manejo eficiente de audios MP3
 from src.camera.posture_detector import PostureDetector
 from src.data.storage import StorageManager
+from src.utils.config import CAMERA_INDEX, USE_DIRECT_SHOW
 
 # Inicializar el mezclador de audio de pygame
 pygame.mixer.init()

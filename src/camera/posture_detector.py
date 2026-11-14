@@ -2,9 +2,16 @@ import cv2
 import math
 import numpy as np
 import mediapipe as mp
+from src.utils.config import (
+    MAX_CALIB_FRAMES, 
+    DROP_THRESHOLD_RATIO, 
+    EAR_MULTIPLIER_THRESHOLD, 
+    CONSECUTIVE_FRAMES_FATIGUE, 
+    CABECEO_RATIO_FACTOR
+)
 
 class PostureDetector:
-    def __init__(self, consecutive_frames_fatigue=30, drop_threshold_ratio=0.92):
+    def __init__(self, consecutive_frames_fatigue=CONSECUTIVE_FRAMES_FATIGUE, drop_threshold_ratio=DROP_THRESHOLD_RATIO):
         self.consecutive_frames_fatigue = consecutive_frames_fatigue
         self.drop_threshold_ratio = drop_threshold_ratio
         
@@ -14,9 +21,9 @@ class PostureDetector:
         # Variables de calibración dinámica
         self.base_shoulder_height = None
         self.baseline_ears = []
-        self.ear_threshold = 0.21  # Se ajustará automáticamente tras calibrar
+        self.ear_threshold = 0.21  
         self.calib_frames_count = 0
-        self.max_calib_frames = 30  # Reducido ligeramente a 30 para agilizar la calibración (~1 segundo)
+        self.max_calib_frames = MAX_CALIB_FRAMES
         
         self.LEFT_EYE = [33, 160, 158, 133, 153, 144]
         self.RIGHT_EYE = [363, 385, 387, 263, 373, 380]
@@ -35,9 +42,6 @@ class PostureDetector:
             return 0.35
 
     def analizar_y_dibujar(self, frame, pose_result, face_result):
-        """
-        Analiza la postura, calibra dinámicamente y dibuja los puntos clave sobre el fotograma.
-        """
         h, w, _ = frame.shape
         alertas_detectadas = []
         
@@ -66,16 +70,16 @@ class PostureDetector:
                     
                     if self.calib_frames_count >= self.max_calib_frames:
                         avg_open_ear = np.mean(self.baseline_ears)
-                        self.ear_threshold = avg_open_ear * 0.75  
+                        self.ear_threshold = avg_open_ear * EAR_MULTIPLIER_THRESHOLD  
                         self.calibrated = True
                 except Exception:
-                    pass # Evita que un cálculo fallido rompa el fotograma en negro
+                    pass
 
-        # 1. Dibujar y evaluar Espalda Curva
+        # 1. Espalda Curva
         if pose_landmarks:
             for lm in pose_landmarks:
                 cx, cy = int(lm.x * w), int(lm.y * h)
-                cv2.circle(frame, (cx, cy), 3, (0, 255, 0), -1)  # Puntos verdes para pose
+                cv2.circle(frame, (cx, cy), 3, (0, 255, 0), -1)
             
             if self.calibrated and self.base_shoulder_height is not None:
                 hombro_izq = pose_landmarks[11].y * h
@@ -84,11 +88,11 @@ class PostureDetector:
                 if altura_actual > (self.base_shoulder_height / self.drop_threshold_ratio):
                     alertas_detectadas.append("ESPALDA_CURVA")
 
-        # 2. Dibujar y evaluar Ojos / Fatiga (EAR Dinámico)
+        # 2. Ojos / Fatiga (EAR Dinámico)
         if face_landmarks:
             for lm in face_landmarks:
                 cx, cy = int(lm.x * w), int(lm.y * h)
-                cv2.circle(frame, (cx, cy), 1, (255, 0, 0), -1)  # Puntos azules para la cara
+                cv2.circle(frame, (cx, cy), 1, (255, 0, 0), -1)
 
             if self.calibrated:
                 try:
@@ -110,12 +114,12 @@ class PostureDetector:
                 try:
                     nariz_y = pose_landmarks[0].y * h
                     centro_hombros_y = (pose_landmarks[11].y * h + pose_landmarks[12].y * h) / 2.0
-                    if (centro_hombros_y - nariz_y) < (h * 0.12):
+                    if (centro_hombros_y - nariz_y) < (h * CABECEO_RATIO_FACTOR):
                         alertas_detectadas.append("CABECEO_SOMNOLENCIA")
                 except Exception:
                     pass
 
-        # Texto de estado de calibración en el frame
+        # Texto de estado
         if self.calibrated:
             estado_texto = f"Calibrado OK (Umbral: {self.ear_threshold:.2f}) ✅"
             color_estado = (0, 255, 0)
