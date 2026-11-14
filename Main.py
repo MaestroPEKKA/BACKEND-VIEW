@@ -6,6 +6,7 @@ import pandas as pd
 import pygame  # Librería para manejo eficiente de audios MP3
 from src.camera.posture_detector import PostureDetector
 from src.data.storage import StorageManager
+from src.data.episode_tracker import EpisodeTracker
 from src.ui.monitor_panel import mostrar_panel
 from src.utils.config import CAMERA_INDEX, USE_DIRECT_SHOW
 import streamlit as st
@@ -240,6 +241,7 @@ def main():
     cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
     panel_estado = st.empty()
     alerta_placeholder = st.empty()
+    tracker = EpisodeTracker()
     mostrar_panel(panel_estado, camara_conectada=cap.isOpened())
 
     try:
@@ -273,18 +275,21 @@ def main():
 
         # Registrar alertas y controlar las alarmas de audio dinámicas
         if alertas:
-          for alerta in alertas:
-            db.registrar_alerta(
-                st.session_state.sesion_activa_id,
-                alerta,
-                "Detectado en tiempo real",
-            )
+          # Solo registrar alertas cuando comienza un episodio.
+          iniciados, terminados = tracker.actualizar(alertas)
+          for alerta in iniciados:
+            db.registrar_alerta(st.session_state.sesion_activa_id, alerta, "Inicio de episodio")
+          for episodio in terminados:
+            db.registrar_episodio(st.session_state.sesion_activa_id, episodio)
 
           reproducir_alerta_continua(alertas[0])
           alerta_placeholder.error(
               f"⚠️ ¡ALERTA DETECTADA!: {', '.join(alertas)}"
           )
         else:
+          _, terminados = tracker.actualizar([])
+          for episodio in terminados:
+            db.registrar_episodio(st.session_state.sesion_activa_id, episodio)
           detener_alerta_sonora()
           alerta_placeholder.success("🟢 Postura y estado óptimos.")
 
@@ -294,10 +299,16 @@ def main():
         # Capturar tecla 'q' para salir de la ventana flotante
         if cv2.waitKey(1) & 0xFF == ord("q"):
           st.session_state.monitoreando = False
-          db.finalizar_sesion(st.session_state.sesion_activa_id)
           break
 
     finally:
+      # Cierra episodios pendientes incluso ante un error o cierre con q.
+      for episodio in tracker.finalizar_todos():
+        db.registrar_episodio(st.session_state.sesion_activa_id, episodio)
+      if st.session_state.sesion_activa_id:
+        db.finalizar_sesion(st.session_state.sesion_activa_id)
+        st.session_state.sesion_activa_id = None
+      st.session_state.monitoreando = False
       cap.release()
       cv2.destroyAllWindows()
       detener_alerta_sonora()
@@ -334,10 +345,10 @@ def main():
             df_historial["Duracion_Total_Segundos"].sum() / 60
         )
         total_encorvamientos = int(
-            df_historial["Veces_Espalda_Curva (Me agache)"].sum()
+            df_historial["Episodios_Espalda_Curva"].sum()
         )
         total_sueño = int(
-            df_historial["Episodios_Somnolencia (Me dormi)"].sum()
+            df_historial["Episodios_Somnolencia"].sum()
         )
 
         with col_kpi1:
@@ -379,8 +390,8 @@ def main():
           if not df_historial.empty:
             df_chart = df_historial[[
                 "Sesion_ID",
-                "Veces_Espalda_Curva (Me agache)",
-                "Episodios_Somnolencia (Me dormi)",
+                "Episodios_Espalda_Curva",
+                "Episodios_Somnolencia",
             ]].set_index("Sesion_ID")
             st.bar_chart(df_chart, use_container_width=True)
           else:
