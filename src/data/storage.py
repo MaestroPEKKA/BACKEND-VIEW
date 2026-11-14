@@ -124,3 +124,36 @@ class StorageManager:
             resumen_df.to_csv(path_general, index=False)
             
         return path_sesion
+
+    def exportar_sesiones_a_csv(self):
+        """Exporta todas las sesiones registradas a un archivo CSV consolidado."""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query("SELECT * FROM sesiones", conn)
+        conn.close()
+        
+        path_out = "data/todas_las_sesiones.csv"
+        os.makedirs("data", exist_ok=True)
+        df.to_csv(path_out, index=False)
+        return path_out
+
+    def exportar_alertas_a_csv(self):
+        """Exporta todas las alertas registradas a un archivo CSV consolidado."""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query("SELECT * FROM alertas", conn)
+        conn.close()
+        
+        path_out = "data/todas_las_alertas.csv"
+        os.makedirs("data", exist_ok=True)
+        df.to_csv(path_out, index=False)
+        return path_out
+
+    def obtener_resumen_alertas(self):
+        """Obtiene un resumen agrupado de alertas para los gráficos del panel principal."""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query("SELECT tipo_alerta, COUNT(*) as total FROM alertas GROUP BY tipo_alerta", conn)
+        conn.close()
+        
+        if df.empty:
+            return None
+        # Convertir a formato de diccionario o serie para st.bar_chart
+        return df.set_index("tipo_alerta")["total"]

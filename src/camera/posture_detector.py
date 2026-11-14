@@ -16,7 +16,7 @@ class PostureDetector:
         self.baseline_ears = []
         self.ear_threshold = 0.21  # Se ajustará automáticamente tras calibrar
         self.calib_frames_count = 0
-        self.max_calib_frames = 45  # ~1.5 segundos de calibración inicial
+        self.max_calib_frames = 30  # Reducido ligeramente a 30 para agilizar la calibración (~1 segundo)
         
         self.LEFT_EYE = [33, 160, 158, 133, 153, 144]
         self.RIGHT_EYE = [363, 385, 387, 263, 373, 380]
@@ -45,31 +45,31 @@ class PostureDetector:
         face_landmarks = face_result.face_landmarks[0] if face_result and face_result.face_landmarks else None
 
         # --- FASE DE CALIBRACIÓN DINÁMICA ---
-        if not self.calibrated and pose_landmarks and face_landmarks:
-            hombro_izq = pose_landmarks[11].y * h
-            hombro_der = pose_landmarks[12].y * h
-            shoulder_avg = (hombro_izq + hombro_der) / 2.0
-            
-            ear_izq = self._calculate_ear(face_landmarks, self.LEFT_EYE, w, h)
-            ear_der = self._calculate_ear(face_landmarks, self.RIGHT_EYE, w, h)
-            ear_prom = (ear_izq + ear_der) / 2.0
-            
-            # Acumular muestras para la calibración
-            if self.calib_frames_count == 0:
-                self.base_shoulder_height = shoulder_avg
-            else:
-                # Promedio incremental de hombros
-                self.base_shoulder_height = (self.base_shoulder_height * self.calib_frames_count + shoulder_avg) / (self.calib_frames_count + 1)
-            
-            self.baseline_ears.append(ear_prom)
-            self.calib_frames_count += 1
-            
-            # Al completar los fotogramas de calibración, fijamos el umbral personalizado
-            if self.calib_frames_count >= self.max_calib_frames:
-                avg_open_ear = np.mean(self.baseline_ears)
-                # El umbral de fatiga será el 75% del EAR cuando estás con los ojos abiertos mirando al frente
-                self.ear_threshold = avg_open_ear * 0.75  
-                self.calibrated = True
+        if not self.calibrated:
+            if pose_landmarks and face_landmarks:
+                try:
+                    hombro_izq = pose_landmarks[11].y * h
+                    hombro_der = pose_landmarks[12].y * h
+                    shoulder_avg = (hombro_izq + hombro_der) / 2.0
+                    
+                    ear_izq = self._calculate_ear(face_landmarks, self.LEFT_EYE, w, h)
+                    ear_der = self._calculate_ear(face_landmarks, self.RIGHT_EYE, w, h)
+                    ear_prom = (ear_izq + ear_der) / 2.0
+                    
+                    if self.base_shoulder_height is None:
+                        self.base_shoulder_height = shoulder_avg
+                    else:
+                        self.base_shoulder_height = (self.base_shoulder_height * self.calib_frames_count + shoulder_avg) / (self.calib_frames_count + 1)
+                    
+                    self.baseline_ears.append(ear_prom)
+                    self.calib_frames_count += 1
+                    
+                    if self.calib_frames_count >= self.max_calib_frames:
+                        avg_open_ear = np.mean(self.baseline_ears)
+                        self.ear_threshold = avg_open_ear * 0.75  
+                        self.calibrated = True
+                except Exception:
+                    pass # Evita que un cálculo fallido rompa el fotograma en negro
 
         # 1. Dibujar y evaluar Espalda Curva
         if pose_landmarks:
@@ -77,7 +77,7 @@ class PostureDetector:
                 cx, cy = int(lm.x * w), int(lm.y * h)
                 cv2.circle(frame, (cx, cy), 3, (0, 255, 0), -1)  # Puntos verdes para pose
             
-            if self.calibrated:
+            if self.calibrated and self.base_shoulder_height is not None:
                 hombro_izq = pose_landmarks[11].y * h
                 hombro_der = pose_landmarks[12].y * h
                 altura_actual = (hombro_izq + hombro_der) / 2.0
@@ -91,31 +91,37 @@ class PostureDetector:
                 cv2.circle(frame, (cx, cy), 1, (255, 0, 0), -1)  # Puntos azules para la cara
 
             if self.calibrated:
-                ear_izq = self._calculate_ear(face_landmarks, self.LEFT_EYE, w, h)
-                ear_der = self._calculate_ear(face_landmarks, self.RIGHT_EYE, w, h)
-                ear_promedio = (ear_izq + ear_der) / 2.0
+                try:
+                    ear_izq = self._calculate_ear(face_landmarks, self.LEFT_EYE, w, h)
+                    ear_der = self._calculate_ear(face_landmarks, self.RIGHT_EYE, w, h)
+                    ear_promedio = (ear_izq + ear_der) / 2.0
 
-                if ear_promedio < self.ear_threshold:
-                    self.counter_eyes_closed += 1
-                    if self.counter_eyes_closed >= self.consecutive_frames_fatigue:
-                        alertas_detectadas.append("DORMIDO_SOMNOLENCIA_CRITICA")
-                else:
-                    self.counter_eyes_closed = 0
+                    if ear_promedio < self.ear_threshold:
+                        self.counter_eyes_closed += 1
+                        if self.counter_eyes_closed >= self.consecutive_frames_fatigue:
+                            alertas_detectadas.append("DORMIDO_SOMNOLENCIA_CRITICA")
+                    else:
+                        self.counter_eyes_closed = 0
+                except Exception:
+                    pass
 
             # 3. Cabeceo
             if pose_landmarks and self.calibrated:
-                nariz_y = pose_landmarks[0].y * h
-                centro_hombros_y = (pose_landmarks[11].y * h + pose_landmarks[12].y * h) / 2.0
-                if (centro_hombros_y - nariz_y) < (h * 0.12):
-                    alertas_detectadas.append("CABECEO_SOMNOLENCIA")
+                try:
+                    nariz_y = pose_landmarks[0].y * h
+                    centro_hombros_y = (pose_landmarks[11].y * h + pose_landmarks[12].y * h) / 2.0
+                    if (centro_hombros_y - nariz_y) < (h * 0.12):
+                        alertas_detectadas.append("CABECEO_SOMNOLENCIA")
+                except Exception:
+                    pass
 
-        # Texto de estado de calibración en el frame con el umbral dinámico calculado
+        # Texto de estado de calibración en el frame
         if self.calibrated:
-            estado_texto = f"Calibrado OK (EAR Umbral: {self.ear_threshold:.2f}) ✅"
+            estado_texto = f"Calibrado OK (Umbral: {self.ear_threshold:.2f}) ✅"
             color_estado = (0, 255, 0)
         else:
             progreso = int((self.calib_frames_count / self.max_calib_frames) * 100)
-            estado_texto = f"Calibrando postura y ojos... {progreso}% ⏳"
+            estado_texto = f"Colocate frente a camara... {progreso}% ⏳"
             color_estado = (0, 255, 255)
 
         cv2.putText(frame, estado_texto, (30, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_estado, 2)

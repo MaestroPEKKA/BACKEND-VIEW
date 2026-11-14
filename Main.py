@@ -87,14 +87,14 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("📊 Reportes y Datos")
-    if st.sidebar.button("📥 Exportar Datos a CSV"):
+    if st.sidebar.button("📥 Exportar Datos a CSV", width='stretch'):
         path_sesiones = db.exportar_sesiones_a_csv()
         path_alertas = db.exportar_alertas_a_csv()
         st.sidebar.success(f"Exportado en carpeta `data/`")
 
     # Panel Principal
     if st.session_state.monitoreando:
-        st.info(f"🔴 Monitoreo en curso (Sesión ID: {st.session_state.sesion_activa_id}). Presiona 'q' en la ventana emergente de la cámara para detener.")
+        st.info(f"🔴 Monitoreo en curso (Sesión ID: {st.session_state.sesion_activa_id}). **Se ha abierto la ventana emergente de la cámara.** Presiona la tecla **'q'** en dicha ventana para detener la sesión.")
         
         # Inicializar MediaPipe solutions para extraer landmarks
         import mediapipe as mp
@@ -113,14 +113,14 @@ def main():
         # Instancia del detector (utiliza calibración automática)
         detector = PostureDetector(consecutive_frames_fatigue=30)
         
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
         alerta_placeholder = st.empty()
         
         try:
             while cap.isOpened() and st.session_state.monitoreando:
                 ret, frame = cap.read()
                 if not ret:
-                    st.error("No se pudo acceder a la cámara.")
+                    st.error("No se pudo acceder a la cámara. Verifica que no esté ocupada por otra aplicación.")
                     break
                     
                 # Voltear horizontalmente para efecto espejo natural
@@ -140,25 +140,26 @@ def main():
                     for alerta in alertas:
                         db.registrar_alerta(st.session_state.sesion_activa_id, alerta, "Detectado en tiempo real")
                         
-                    # Llamada correcta a la función continua con variantes aleatorias
                     reproducir_alerta_continua(alertas[0])
-                        
                     alerta_placeholder.error(f"⚠️ ¡ALERTA DETECTADA!: {', '.join(alertas)}")
                 else:
-                    # Detener el audio inmediatamente cuando se recupera la postura óptima
                     detener_alerta_sonora()
                     alerta_placeholder.success("🟢 Postura y estado óptimos.")
 
-                # Mostrar ventana de la cámara
+                # 🪟 Desplegar la ventana flotante nativa de OpenCV
                 cv2.imshow("BACKEND-VIEW - Monitoreo Ergonomico", frame_procesado)
                 
+                # Capturar tecla 'q' para salir de la ventana flotante
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     st.session_state.monitoreando = False
+                    db.finalizar_sesion(st.session_state.sesion_activa_id)
                     break
+                    
         finally:
             cap.release()
             cv2.destroyAllWindows()
-            time.sleep(1.5)  # Pausa requerida por el driver de Windows para liberar el puerto USB
+            detener_alerta_sonora()
+            time.sleep(1.0)  # Pausa requerida por el driver de Windows para liberar el puerto USB
             if not st.session_state.monitoreando:
                 st.rerun()
     else:
@@ -199,10 +200,10 @@ def main():
 
                 b_col1, b_col2, _ = st.columns([1, 1, 2])
                 with b_col1:
-                    if st.button("📈 Ver Gráfico de Incidencias", use_container_width=True):
+                    if st.button("📈 Ver Gráfico de Incidencias", width='stretch'):
                         st.session_state.vista_estadistica = "grafico"
                 with b_col2:
-                    if st.button("📋 Ver Historial Tabular", use_container_width=True):
+                    if st.button("📋 Ver Historial Tabular", width='stretch'):
                         st.session_state.vista_estadistica = "tabla"
 
                 st.markdown("")
@@ -218,7 +219,7 @@ def main():
                         
                 elif st.session_state.vista_estadistica == "tabla":
                     st.markdown("#### 📋 Registro Histórico Detallado")
-                    st.dataframe(df_historial, use_container_width=True)
+                    st.dataframe(df_historial, width='stretch')
                     
             except Exception as e:
                 st.info(f"Cargando historial de datos... ({e})")
