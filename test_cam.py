@@ -1,22 +1,22 @@
+"""Prueba manual en Windows. Ejecutar desde la raíz: python test_cam.py"""
 import cv2
+from src.camera.camera_validator import abrir_camara, leer_fotograma, CameraError
+from src.utils.resource_manager import cerrar_recursos
+from src.utils.config import CAMERA_INDEX, USE_DIRECT_SHOW
 
-print("Intentando abrir la cámara con DirectShow...")
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+def main():
+    cap=None
+    try:
+        cap=abrir_camara(CAMERA_INDEX,USE_DIRECT_SHOW)
+        print(f"Cámara {CAMERA_INDEX} conectada. Presiona q para salir.")
+        while True:
+            frame=leer_fotograma(cap,3)
+            cv2.imshow('BACKEND-VIEW - Prueba de camara',frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    except CameraError as e:
+        print(f"FALLO DE CAMARA: {e}")
+    finally:
+        for error in cerrar_recursos(cap): print('Error al cerrar:',error)
 
-if not cap.isOpened():
-    print("❌ Error: No se pudo abrir la cámara.")
-else:
-    print("✅ ¡Cámara abierta con éxito! Presiona 'q' en la ventana de video para salir.")
-    while True:
-        ret, frame = cap.read()
-        if not ret or frame is None:
-            print("⚠️ Fotograma en negro o sin señal...")
-            break
-            
-        cv2.imshow("Prueba de Camara Windows", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-    print("Prueba finalizada.")
+if __name__=='__main__':main()
